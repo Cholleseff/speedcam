@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "Speedcam",
+    "slug": "speedcam",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "com.speedcam.local",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.speedcam.local",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationWhenInUsePermission": "Геолокация нужна, чтобы предупреждать о камерах рядом с вами.",
+          "locationAlwaysAndWhenInUsePermission": "Разрешите «Всегда», чтобы предупреждения о камерах звучали, когда приложение свёрнуто или экран заблокирован."
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": true,
+          "microphonePermission": false
+        }
+      ],
+      "expo-asset"
+    ]
+  }
+}
