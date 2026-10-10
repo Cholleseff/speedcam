@@ -1,7 +1,7 @@
 import { setAudioModeAsync } from 'expo-audio';
 import * as Speech from 'expo-speech';
 
-import { angleDiff, bearingDeg, camerasNear, Camera, distanceM, Nearby, spokenKind } from './cameras';
+import { angleDiff, bearingDeg, camerasNear, Camera, CAMERAS, distanceM, Nearby, spokenKind } from './cameras';
 
 export type Fix = {
   lat: number;
@@ -15,6 +15,9 @@ export type DriveState = {
   fix: Fix | null;
   next: Nearby | null; // nearest camera ahead
   lastAlert: { cam: Camera; dist: number; at: number } | null;
+  fixCount: number; // GPS updates received since tracking started
+  lastFixAt: number | null; // Date.now() of the last update
+  testUntil: number | null; // background test is running until this time
 };
 
 const SEARCH_RADIUS = 1000;
@@ -24,7 +27,7 @@ const AHEAD_CONE = 50; // degrees either side of heading
 const OVERSPEED_RADIUS = 300; // warn about speeding only this close to a camera
 const OVERSPEED_TOLERANCE = 20; // km/h; fines start above +20
 
-let state: DriveState = { fix: null, next: null, lastAlert: null };
+let state: DriveState = { fix: null, next: null, lastAlert: null, fixCount: 0, lastFixAt: null, testUntil: null };
 const alerted = new Set<string>();
 const overspeedWarned = new Set<string>();
 const listeners = new Set<(s: DriveState) => void>();
@@ -87,6 +90,75 @@ function roundDistance(m: number): number {
   return m >= 100 ? Math.round(m / 50) * 50 : Math.round(m / 10) * 10;
 }
 
+// --- Background test: speaks periodically so you can check alerts work with the screen locked.
+
+const TEST_FIRST_DELAY = 15_000;
+const TEST_INTERVAL = 60_000;
+const TEST_DURATION = 5 * 60_000;
+
+let testNextAt = 0;
+let testFirst = true;
+let testTimer: ReturnType<typeof setInterval> | null = null;
+
+function spokenDistance(m: number): string {
+  if (m < 1000) return `${roundDistance(m)} метров`;
+  const km = Math.round(m / 100) / 10;
+  if (!Number.isInteger(km)) return `${String(km).replace('.', ',')} километра`;
+  const n10 = km % 10;
+  const n100 = km % 100;
+  const word =
+    n10 === 1 && n100 !== 11 ? 'километр' : n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14) ? 'километра' : 'километров';
+  return `${km} ${word}`;
+}
+
+function nearestCamera(fix: Fix): Nearby | null {
+  let best: Nearby | null = null;
+  for (const cam of CAMERAS) {
+    const dist = distanceM(fix.lat, fix.lon, cam.lat, cam.lon);
+    if (!best || dist < best.dist) best = { cam, dist };
+  }
+  return best;
+}
+
+function testTick() {
+  if (state.testUntil == null) return;
+  const now = Date.now();
+  if (now >= state.testUntil) {
+    stopBackgroundTest();
+    say(`Тест фона завершён. Получено обновлений геопозиции: ${state.fixCount}`);
+    return;
+  }
+  if (now < testNextAt) return;
+  testNextAt = now + TEST_INTERVAL;
+
+  const prefix = testFirst ? 'Фоновый режим работает. ' : '';
+  testFirst = false;
+  const fix = state.fix;
+  const fresh = fix && state.lastFixAt != null && now - state.lastFixAt < 30_000;
+  if (!fix) {
+    say(`${prefix}Геопозиция ещё не получена`);
+  } else if (!fresh) {
+    say(`${prefix}Геопозиция не обновлялась больше 30 секунд`);
+  } else {
+    const n = nearestCamera(fix);
+    say(n ? `${prefix}До ближайшей камеры ${spokenDistance(n.dist)}` : `${prefix}Камер в базе нет`);
+  }
+}
+
+export function startBackgroundTest() {
+  testFirst = true;
+  testNextAt = Date.now() + TEST_FIRST_DELAY;
+  emit({ testUntil: Date.now() + TEST_DURATION });
+  // Ticks come from GPS updates; the timer is a fallback for when the phone is not moving.
+  testTimer ??= setInterval(testTick, 5000);
+}
+
+export function stopBackgroundTest() {
+  if (testTimer) clearInterval(testTimer);
+  testTimer = null;
+  emit({ testUntil: null });
+}
+
 export function handleFix(fix: Fix) {
   const near = camerasNear(fix.lat, fix.lon, SEARCH_RADIUS);
 
@@ -125,11 +197,13 @@ export function handleFix(fix: Fix) {
     say('Снизьте скорость');
   }
 
-  emit({ fix, next, lastAlert });
+  emit({ fix, next, lastAlert, fixCount: state.fixCount + 1, lastFixAt: Date.now() });
+  testTick();
 }
 
 export function resetAlerts() {
   alerted.clear();
   overspeedWarned.clear();
-  emit({ next: null, lastAlert: null });
+  stopBackgroundTest();
+  emit({ next: null, lastAlert: null, fixCount: 0, lastFixAt: null });
 }

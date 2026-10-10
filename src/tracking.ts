@@ -27,9 +27,11 @@ export type StartResult = 'background' | 'foreground-only' | 'denied';
 
 let foregroundSub: Location.LocationSubscription | null = null;
 
+// distanceInterval 0: keep getting updates even when standing still (traffic lights,
+// background test at home); handling one update is cheap.
 const OPTIONS = {
   accuracy: Location.Accuracy.BestForNavigation,
-  distanceInterval: 10,
+  distanceInterval: 0,
 };
 
 export async function startTracking(): Promise<StartResult> {

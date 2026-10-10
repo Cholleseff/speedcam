@@ -4,7 +4,7 @@ import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native'
 import MapView, { Callout, Marker } from 'react-native-maps';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { DriveState, say, subscribe } from './src/alerts';
+import { DriveState, say, startBackgroundTest, stopBackgroundTest, subscribe } from './src/alerts';
 import { Camera, CAMERAS, DIRECTION_LABELS, limitText, spokenKind, tagLabel } from './src/cameras';
 import { isTracking, startTracking, StartResult, stopTracking } from './src/tracking';
 
@@ -110,6 +110,27 @@ function MainScreen() {
     }
   }
 
+  const testing = drive?.testUntil != null;
+
+  function toggleTest() {
+    if (testing) {
+      stopBackgroundTest();
+      return;
+    }
+    if (mode === 'foreground-only') {
+      Alert.alert(
+        'Фон недоступен',
+        'Сейчас геолокация разрешена только «При использовании», поэтому при блокировке экрана приложение остановится. Выберите «Всегда» в настройках, затем нажмите «Остановить» и снова «Поехали».',
+        [
+          { text: 'Всё равно запустить', onPress: startBackgroundTest },
+          { text: 'Настройки', onPress: () => Linking.openURL('app-settings:') },
+        ],
+      );
+      return;
+    }
+    startBackgroundTest();
+  }
+
   const speedKmh = fix?.speed != null ? Math.round(fix.speed * 3.6) : null;
   const next = drive?.next;
   const limit = next?.cam.speedLimit ?? null;
@@ -140,7 +161,14 @@ function MainScreen() {
           {mode === 'off' && `Выключено · ${CAMERAS.length} камер в базе`}
           {mode === 'background' && 'Предупреждения включены (работает в фоне)'}
           {mode === 'foreground-only' && 'Включено, но только пока экран открыт'}
+          {mode !== 'off' && ` · GPS-обновлений: ${drive?.fixCount ?? 0}`}
         </Text>
+        {testing && (
+          <Text style={styles.testNote}>
+            Тест фона: заблокируйте телефон. Через 15 с прозвучит «Фоновый режим работает», затем раз в минуту —
+            расстояние до ближайшей камеры. Тест длится 5 минут.
+          </Text>
+        )}
 
         {mode !== 'off' && (
           <View style={styles.row}>
@@ -184,6 +212,11 @@ function MainScreen() {
           <Pressable style={styles.button} onPress={() => say('Камера скорости через 300 метров')}>
             <Text style={styles.buttonText}>🔊</Text>
           </Pressable>
+          {mode !== 'off' && (
+            <Pressable style={[styles.button, testing && styles.testing]} onPress={toggleTest}>
+              <Text style={styles.buttonText}>{testing ? 'Стоп теста' : 'Тест фона'}</Text>
+            </Pressable>
+          )}
           {!follow && mode !== 'off' && (
             <Pressable style={styles.button} onPress={() => setFollow(true)}>
               <Text style={styles.buttonText}>◎</Text>
@@ -239,6 +272,8 @@ const styles = StyleSheet.create({
   },
   limitText: { fontSize: 22, fontWeight: '800', color: '#111' },
   limitTextSmall: { fontSize: 13 },
+  testing: { backgroundColor: '#1d5fbf' },
+  testNote: { color: '#9cc3ff', fontSize: 13 },
   start: { backgroundColor: '#1f8f4e' },
   stop: { backgroundColor: '#b3261e' },
   buttonText: { color: '#fff', fontSize: 17, fontWeight: '600' },
