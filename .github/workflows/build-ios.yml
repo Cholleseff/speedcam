@@ -29,7 +29,6 @@ jobs:
 
       - name: Build app (no code signing)
         run: |
-          set -o pipefail
           xcodebuild \
             -workspace ios/Speedcam.xcworkspace \
             -scheme Speedcam \
@@ -38,7 +37,21 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tail -n 200
+            build > xcodebuild.log 2>&1 || {
+              echo "::group::errors"
+              grep -n -E "error:|error |FAILED|Error:" xcodebuild.log | head -100
+              echo "::endgroup::"
+              tail -n 80 xcodebuild.log
+              exit 1
+            }
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          if-no-files-found: ignore
 
       - name: Package .ipa
         run: |
