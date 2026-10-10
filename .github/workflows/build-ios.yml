@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -19,8 +19,14 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Expo SDK 57 is built against Xcode 26.6 (see EAS image sdk-57).
       - name: Select Xcode
-        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=/Applications/Xcode_26.6.app
+          [ -d "$XC" ] || XC="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
 
       - run: npm ci
 
